@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Omgevingsdata</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
+  :root{
+    --sky-dark:#0d1b2a;--sky-mid:#1b2d45;--sky-accent:#4a9eda;
+    --cloud:#c8dff0;--text:#e8f4fd;--muted:#7a9ab5;
+    --card:#162436;--border:#2a4060;
+    --green:#5ecb8c;--amber:#f0b429;--red:#e85d5d;--purple:#c97fd4;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--sky-dark);color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-weight:300;min-height:100vh;padding:1.5rem 1rem 3rem;}
+
+  header{text-align:center;margin-bottom:1.5rem;}
+  .logo{font-family:'IBM Plex Mono',monospace;font-size:0.7rem;letter-spacing:0.3em;color:var(--sky-accent);text-transform:uppercase;margin-bottom:0.3rem;}
+  h1{font-size:1.8rem;font-weight:600;letter-spacing:-0.02em;}
+  h1 span{color:var(--sky-accent);}
+  .subtitle{margin-top:0.3rem;color:var(--muted);font-size:0.82rem;}
+
+  .locate-btn{display:flex;align-items:center;justify-content:center;gap:0.6rem;background:var(--sky-accent);color:var(--sky-dark);font-family:'IBM Plex Sans',sans-serif;font-size:1rem;font-weight:600;border:none;border-radius:10px;padding:0.9rem 2rem;cursor:pointer;margin:1rem auto;width:100%;max-width:380px;transition:opacity 0.15s,transform 0.1s;}
+  .locate-btn:active{transform:scale(0.97);}
+  .locate-btn:hover{opacity:0.88;}
+  .locate-btn:disabled{opacity:0.5;cursor:not-allowed;}
+
+  .manual-row{max-width:380px;margin:0 auto 0.75rem;text-align:center;}
+  .manual-row p{color:var(--muted);font-size:0.78rem;margin-bottom:0.5rem;}
+  .manual-row .flex{display:flex;gap:0.5rem;}
+  .manual-row input{flex:1;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:0.9rem;padding:0.65rem 0.9rem;outline:none;}
+  .manual-row input:focus{border-color:var(--sky-accent);}
+  .manual-row button{background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--sky-accent);font-family:'IBM Plex Sans',sans-serif;font-size:0.9rem;font-weight:600;padding:0.65rem 1rem;cursor:pointer;}
+
+  .status{text-align:center;color:var(--muted);font-size:0.82rem;min-height:1.3rem;margin-bottom:0.5rem;}
+  .spinner{display:inline-block;width:13px;height:13px;border:2px solid var(--muted);border-top-color:var(--sky-accent);border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:5px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .error-box{background:#2d1515;border:1px solid var(--red);border-radius:8px;padding:0.9rem 1.1rem;color:var(--red);font-size:0.83rem;display:none;max-width:480px;margin:0 auto 1rem;line-height:1.5;}
+  .error-box.visible{display:block;}
+
+  /* Location bar */
+  .loc-bar{max-width:480px;margin:0 auto 1rem;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:0.7rem 1rem;display:none;}
+  .loc-bar.visible{display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;}
+  .loc-name{font-size:0.9rem;font-weight:600;flex:1;}
+  .loc-coords{font-family:'IBM Plex Mono',monospace;font-size:0.7rem;color:var(--muted);}
+  .loc-time{font-family:'IBM Plex Mono',monospace;font-size:0.7rem;color:var(--muted);}
+
+  /* Data grid */
+  .data-grid{display:grid;grid-template-columns:1fr 1fr;gap:0.65rem;max-width:480px;margin:0 auto;}
+  .data-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1rem 1.1rem;position:relative;overflow:hidden;}
+  .data-card.wide{grid-column:1/-1;}
+  .data-icon{font-size:1.5rem;margin-bottom:0.3rem;}
+  .data-label{font-size:0.62rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:0.25rem;}
+  .data-value{font-size:1.6rem;font-weight:600;font-family:'IBM Plex Mono',monospace;color:var(--text);line-height:1.1;}
+  .data-unit{font-size:0.8rem;font-weight:400;color:var(--muted);margin-left:0.15rem;}
+  .data-sub{font-size:0.72rem;color:var(--muted);margin-top:0.2rem;}
+  .data-badge{display:inline-block;font-size:0.7rem;font-weight:600;padding:0.15rem 0.5rem;border-radius:4px;margin-top:0.3rem;}
+
+  /* Color accents per card */
+  .card-temp .data-value{color:#f0a060;}
+  .card-wind .data-value{color:var(--sky-accent);}
+  .card-gust .data-value{color:#6ab0e8;}
+  .card-vis .data-value{color:var(--green);}
+  .card-precip .data-value{color:#7eb8d4;}
+  .card-uv .data-value{color:var(--amber);}
+  .card-kp .data-value{color:var(--purple);}
+  .card-sat .data-value{color:var(--green);}
+
+  /* Wind direction compass */
+  .compass{width:56px;height:56px;position:relative;margin:0 auto 0.3rem;}
+  .compass-ring{width:56px;height:56px;border:2px solid var(--border);border-radius:50%;position:absolute;}
+  .compass-arrow{position:absolute;top:50%;left:50%;width:4px;height:22px;background:var(--sky-accent);border-radius:2px;transform-origin:bottom center;margin-left:-2px;margin-top:-22px;}
+  .compass-n{position:absolute;top:-2px;left:50%;transform:translateX(-50%);font-size:0.55rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
+
+  /* Satellite passes list */
+  .sat-list{display:flex;flex-direction:column;gap:0.4rem;margin-top:0.5rem;}
+  .sat-row{display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid var(--border);font-size:0.8rem;}
+  .sat-row:last-child{border-bottom:none;}
+  .sat-name{color:var(--sky-accent);font-family:'IBM Plex Mono',monospace;font-size:0.72rem;}
+  .sat-time{color:var(--text);}
+  .sat-el{color:var(--muted);font-size:0.7rem;}
+  .sat-visible{color:var(--green);font-size:0.7rem;font-weight:600;}
+
+  /* Kp gauge */
+  .kp-bar{margin-top:0.5rem;height:8px;border-radius:4px;background:var(--border);overflow:hidden;}
+  .kp-fill{height:100%;border-radius:4px;transition:width 0.4s;}
+
+  /* UV bar */
+  .uv-bar{margin-top:0.5rem;height:8px;border-radius:4px;background:linear-gradient(to right,#5ecb8c,#f0b429,#e87030,#e85d5d,#9020c0);position:relative;}
+  .uv-marker{position:absolute;top:-3px;width:14px;height:14px;background:white;border:2px solid var(--sky-dark);border-radius:50%;transform:translateX(-50%);transition:left 0.4s;}
+
+  footer{text-align:center;margin-top:2.5rem;font-size:0.68rem;color:var(--muted);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Locatiedata · live</div>
+  <h1>Omgevings<span>data</span></h1>
+  <p class="subtitle">Weer · UV · Kp-index · Zichtbare satellieten</p>
+</header>
+
+<button class="locate-btn" id="locateBtn" onclick="getLocation()">
+  📍 Haal data op voor mijn locatie
+</button>
+
+<div class="manual-row">
+  <p>of voer een plaatsnaam of coördinaten in</p>
+  <div class="flex">
+    <input id="placeInput" type="text" placeholder="bijv. Huissen of 51.933, 5.944"
+      onkeydown="if(event.key==='Enter')searchPlace()">
+    <button onclick="searchPlace()">Zoek</button>
+  </div>
+</div>
+
+<div class="status" id="status"></div>
+<div class="error-box" id="errorBox"></div>
+
+<div class="loc-bar" id="locBar">
+  <div>
+    <div class="loc-name" id="locName"></div>
+    <div class="loc-coords" id="locCoords"></div>
+  </div>
+  <div class="loc-time" id="locTime"></div>
+</div>
+
+<div class="data-grid" id="dataGrid" style="display:none;">
+
+  <!-- Temperatuur -->
+  <div class="data-card card-temp">
+    <div class="data-icon">🌡️</div>
+    <div class="data-label">Temperatuur</div>
+    <div class="data-value" id="valTemp">–<span class="data-unit">°C</span></div>
+    <div class="data-sub" id="subTemp"></div>
+  </div>
+
+  <!-- Zichtbaarheid -->
+  <div class="data-card card-vis">
+    <div class="data-icon">👁️</div>
+    <div class="data-label">Zichtbaarheid</div>
+    <div class="data-value" id="valVis">–<span class="data-unit">km</span></div>
+    <div class="data-sub" id="subVis"></div>
+  </div>
+
+  <!-- Neerslag kans -->
+  <div class="data-card card-precip">
+    <div class="data-icon">🌧️</div>
+    <div class="data-label">Neerslag kans</div>
+    <div class="data-value" id="valPrecip">–<span class="data-unit">%</span></div>
+    <div class="data-sub" id="subPrecip"></div>
+  </div>
+
+  <!-- Wind -->
+  <div class="data-card card-wind">
+    <div class="data-icon">💨</div>
+    <div class="data-label">Windsnelheid</div>
+    <div class="data-value" id="valWind">–<span class="data-unit">m/s</span></div>
+    <div class="data-sub" id="subWind"></div>
+  </div>
+
+  <!-- Windvlagen -->
+  <div class="data-card card-gust">
+    <div class="data-icon">💨</div>
+    <div class="data-label">Windvlagen</div>
+    <div class="data-value" id="valGust">–<span class="data-unit">m/s</span></div>
+    <div class="data-sub" id="subGust"></div>
+  </div>
+
+  <!-- Windrichting -->
+  <div class="data-card wide" style="text-align:center;">
+    <div class="data-label" style="text-align:left;">Windrichting</div>
+    <div style="display:flex;align-items:center;gap:1.5rem;margin-top:0.5rem;">
+      <div class="compass">
+        <div class="compass-ring"></div>
+        <div class="compass-n">N</div>
+        <div class="compass-arrow" id="compassArrow"></div>
+      </div>
+      <div style="text-align:left;">
+        <div class="data-value card-wind" id="valWindDir" style="font-size:2rem;color:var(--sky-accent);">–°</div>
+        <div class="data-sub" id="valWindDirText" style="font-size:1rem;margin-top:0.2rem;color:var(--cloud);"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- UV Index -->
+  <div class="data-card card-uv wide">
+    <div class="data-icon">☀️</div>
+    <div class="data-label">UV Index</div>
+    <div style="display:flex;align-items:center;gap:1rem;">
+      <div>
+        <div class="data-value" id="valUV">–</div>
+        <div class="data-sub" id="subUV"></div>
+      </div>
+      <div style="flex:1;">
+        <div class="uv-bar">
+          <div class="uv-marker" id="uvMarker" style="left:0%"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.6rem;color:var(--muted);margin-top:0.4rem;">
+          <span>0</span><span>3</span><span>6</span><span>8</span><span>11+</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Kp Index -->
+  <div class="data-card card-kp wide">
+    <div class="data-icon">🌌</div>
+    <div class="data-label">Kp-index (geomagnetisch)</div>
+    <div style="display:flex;align-items:center;gap:1rem;">
+      <div>
+        <div class="data-value" id="valKp">–</div>
+        <div class="data-sub" id="subKp"></div>
+      </div>
+      <div style="flex:1;">
+        <div class="kp-bar">
+          <div class="kp-fill" id="kpFill" style="width:0%;background:var(--green);"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.6rem;color:var(--muted);margin-top:0.4rem;">
+          <span>0 Rustig</span><span>4</span><span>5 Storm</span><span>9 Extreem</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Zichtbare satellieten -->
+  <div class="data-card wide" id="satCard">
+    <div class="data-icon">🛰️</div>
+    <div class="data-label">Zichtbare satellieten (komende 24u)</div>
+    <div class="sat-list" id="satList">
+      <div style="color:var(--muted);font-size:0.82rem;">Laden…</div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  Weer: Open-Meteo · Kp: NOAA SWPC · Satellieten: Pollux Labs ISS API · Tijden lokaal
+</footer>
+
+<script>
+const WIND_DIRS=['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'];
+function degToDir(d){if(d===null||d===undefined)return'–';return WIND_DIRS[Math.round(d/22.5)%16];}
+function msToBft(ms){const s=[0.3,1.6,3.4,5.5,8.0,10.8,13.9,17.2,20.8,24.5,28.5,32.7];for(let i=0;i<s.length;i++)if(ms<s[i])return i;return 12;}
+
+function setStatus(msg,spin=false){
+  document.getElementById('status').innerHTML=(spin?'<span class="spinner"></span>':'')+msg;
+}
+function showError(msg){const e=document.getElementById('errorBox');e.innerHTML=msg;e.classList.add('visible');}
+function hideError(){document.getElementById('errorBox').classList.remove('visible');}
+
+async function getLocation(){
+  hideError();
+  document.getElementById('locateBtn').disabled=true;
+  document.getElementById('dataGrid').style.display='none';
+  document.getElementById('locBar').classList.remove('visible');
+  setStatus('Locatie ophalen…',true);
+  if(!navigator.geolocation){showError('Locatietoegang niet ondersteund.');document.getElementById('locateBtn').disabled=false;return;}
+  navigator.geolocation.getCurrentPosition(
+    async pos=>{
+      await fetchAll(pos.coords.latitude,pos.coords.longitude);
+      document.getElementById('locateBtn').disabled=false;
+    },
+    err=>{
+      const msgs={1:'Locatietoegang geweigerd. Open de app in Safari en geef toestemming via AA → Websiteinstellingen → Locatie.',2:'Locatie niet beschikbaar.',3:'Time-out. Probeer opnieuw.'};
+      showError(msgs[err.code]||'Locatiefout.');
+      setStatus('');
+      document.getElementById('locateBtn').disabled=false;
+    },
+    {timeout:15000,maximumAge:60000}
+  );
+}
+
+async function searchPlace(){
+  const q=document.getElementById('placeInput').value.trim();
+  if(!q){showError('Voer een plaatsnaam of coördinaten in.');return;}
+  hideError();
+  document.getElementById('dataGrid').style.display='none';
+  document.getElementById('locBar').classList.remove('visible');
+
+  // Check for coordinates
+  const cm=q.match(/^(-?\d{1,3}(?:[.,]\d+)?)[°\s,]+(-?\d{1,3}(?:[.,]\d+)?)/);
+  if(cm){
+    const lat=parseFloat(cm[1].replace(',','.')),lon=parseFloat(cm[2].replace(',','.'));
+    if(lat>=-90&&lat<=90&&lon>=-180&&lon<=180){
+      setStatus('Coördinaten gevonden, data ophalen…',true);
+      await fetchAll(lat,lon);
+      return;
+    }
+  }
+  setStatus(`"${q}" zoeken…`,true);
+  try{
+    const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`,
+      {headers:{'Accept-Language':'nl','User-Agent':'omgevingsdata-app'}});
+    const d=await r.json();
+    if(!d.length){showError(`"${q}" niet gevonden.`);setStatus('');return;}
+    setStatus(`${d[0].display_name.split(',')[0]} gevonden, data ophalen…`,true);
+    await fetchAll(parseFloat(d[0].lat),parseFloat(d[0].lon));
+  }catch(e){showError('Zoekfout: '+e.message);setStatus('');}
+}
+
+async function fetchAll(lat,lon){
+  setStatus('Weerdata ophalen…',true);
+
+  // Reverse geocode
+  let placeName=`${lat.toFixed(4)}°N, ${lon.toFixed(4)}°E`;
+  try{
+    const gr=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+      {headers:{'Accept-Language':'nl','User-Agent':'omgevingsdata-app'}});
+    const gd=await gr.json();
+    const a=gd.address||{};
+    placeName=a.city||a.town||a.village||a.municipality||placeName;
+  }catch(e){}
+
+  // Show location bar
+  const lb=document.getElementById('locBar');
+  lb.classList.add('visible');
+  document.getElementById('locName').textContent=placeName;
+  document.getElementById('locCoords').textContent=`${lat.toFixed(5)}°N, ${lon.toFixed(5)}°E`;
+  document.getElementById('locTime').textContent='Bijgewerkt: '+new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});
+
+  // 1. Open-Meteo weather + UV
+  const wxUrl=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`+
+    `&current=temperature_2m,visibility,precipitation_probability,wind_speed_10m,wind_gusts_10m,wind_direction_10m,uv_index`+
+    `&wind_speed_unit=ms&timezone=auto&forecast_days=1`;
+
+  // 2. NOAA Kp index
+  const kpUrl='https://services.swpc.noaa.gov/json/planetary_k_index_1m.json';
+
+  // 3. ISS passes
+  const issUrl=`https://iss-api.polluxlabs.io/iss-pass?lat=${lat}&lon=${lon}&visible_only=true&passes=5`;
+
+  const [wxRes, kpRes, issRes] = await Promise.allSettled([
+    fetch(wxUrl).then(r=>r.json()),
+    fetch(kpUrl).then(r=>r.json()),
+    fetch(issUrl).then(r=>r.json()),
+  ]);
+
+  setStatus('');
+
+  // ── Weer ──────────────────────────────────────────────────────
+  if(wxRes.status==='fulfilled'){
+    const c=wxRes.value.current;
+    const temp=c.temperature_2m;
+    const vis=(c.visibility/1000).toFixed(1);
+    const precip=c.precipitation_probability??'–';
+    const wind=c.wind_speed_10m;
+    const gust=c.wind_gusts_10m;
+    const dir=c.wind_direction_10m;
+    const uv=c.uv_index;
+
+    document.getElementById('valTemp').innerHTML=`${temp.toFixed(1)}<span class="data-unit">°C</span>`;
+    document.getElementById('subTemp').textContent=temp<0?'Onder nul':temp<10?'Koud':temp<20?'Fris':temp<28?'Aangenaam':'Warm';
+
+    document.getElementById('valVis').innerHTML=`${vis}<span class="data-unit">km</span>`;
+    document.getElementById('subVis').textContent=parseFloat(vis)>=10?'Uitstekend':parseFloat(vis)>=5?'Goed':parseFloat(vis)>=1?'Matig':'Slecht';
+
+    document.getElementById('valPrecip').innerHTML=`${precip}<span class="data-unit">%</span>`;
+    document.getElementById('subPrecip').textContent=precip>=70?'Grote kans op neerslag':precip>=40?'Kans op neerslag':precip>=20?'Kleine kans':'Droog';
+
+    const bft=msToBft(wind);
+    document.getElementById('valWind').innerHTML=`${wind.toFixed(1)}<span class="data-unit">m/s</span>`;
+    document.getElementById('subWind').textContent=`${Math.round(wind*3.6)} km/u · ${(wind*1.94384).toFixed(1)} kt · Bft ${bft}`;
+
+    document.getElementById('valGust').innerHTML=`${gust.toFixed(1)}<span class="data-unit">m/s</span>`;
+    document.getElementById('subGust').textContent=`${Math.round(gust*3.6)} km/u · ${(gust*1.94384).toFixed(1)} kt`;
+
+    // Wind direction
+    document.getElementById('valWindDir').textContent=`${dir}°`;
+    document.getElementById('valWindDirText').textContent=`Uit het ${degToDir(dir)}`;
+    document.getElementById('compassArrow').style.transform=`rotate(${dir}deg)`;
+
+    // UV
+    document.getElementById('valUV').textContent=uv?.toFixed(1)??'–';
+    const uvLabel=!uv||uv<3?'Laag':uv<6?'Matig':uv<8?'Hoog':uv<11?'Zeer hoog':'Extreem';
+    document.getElementById('subUV').textContent=uvLabel;
+    const uvPct=Math.min(100,(uv/12)*100);
+    document.getElementById('uvMarker').style.left=uvPct+'%';
+  } else {
+    setStatus('Weerdata niet beschikbaar.');
+  }
+
+  // ── Kp-index ─────────────────────────────────────────────────
+  if(kpRes.status==='fulfilled'){
+    const kpData=kpRes.value;
+    // Get latest value
+    const latest=kpData[kpData.length-1];
+    const kp=parseFloat(latest.kp_index);
+    document.getElementById('valKp').textContent=kp.toFixed(1);
+    const kpLabel=kp<1?'Rustig':kp<3?'Zwakke activiteit':kp<4?'Lichte activiteit':kp<5?'Onrustig':kp<6?'Kleine storm':kp<7?'Matige storm':kp<8?'Zware storm':kp<9?'Ernstige storm':'Extreme storm';
+    document.getElementById('subKp').textContent=kpLabel+(kp>=5?' – Aurora mogelijk!':'');
+    const kpPct=(kp/9)*100;
+    const kpColor=kp<3?'var(--green)':kp<5?'var(--amber)':kp<7?'var(--red)':'var(--purple)';
+    document.getElementById('kpFill').style.width=kpPct+'%';
+    document.getElementById('kpFill').style.background=kpColor;
+    if(kp>=5) document.getElementById('valKp').style.color='var(--amber)';
+  } else {
+    document.getElementById('valKp').textContent='–';
+    document.getElementById('subKp').textContent='Niet beschikbaar';
+  }
+
+  // ── ISS passes ───────────────────────────────────────────────
+  const satList=document.getElementById('satList');
+  if(issRes.status==='fulfilled'&&issRes.value.passes){
+    const passes=issRes.value.passes.filter(p=>p.visible).slice(0,5);
+    if(!passes.length){
+      satList.innerHTML='<div style="color:var(--muted);font-size:0.82rem;">Geen zichtbare ISS-passages komende tijd.</div>';
+    } else {
+      satList.innerHTML=passes.map(p=>{
+        const rise=new Date(p.rise.time);
+        const timeStr=rise.toLocaleString('nl-NL',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+        const dur=Math.round((new Date(p.set.time)-rise)/1000/60);
+        const el=p.culmination?.elevation_deg?.toFixed(0)??'?';
+        const fromDir=p.rise?.compass||'';
+        const toDir=p.set?.compass||'';
+        return `<div class="sat-row">
+          <div>
+            <div class="sat-name">🛸 ISS (ZARYA)</div>
+            <div class="sat-time">${timeStr}</div>
+            <div class="sat-el">Vanuit ${fromDir} → ${toDir} · ${dur} min · max ${el}°</div>
+          </div>
+          <div class="sat-visible">ZICHTBAAR</div>
+        </div>`;
+      }).join('');
+    }
+  } else {
+    satList.innerHTML=`<div style="font-size:0.82rem;color:var(--muted);">
+      ISS-passages niet beschikbaar via API.<br>
+      <a href="https://spotthestation.nasa.gov" target="_blank" style="color:var(--sky-accent);">→ NASA Spot the Station</a>
+    </div>`;
+  }
+
+  document.getElementById('dataGrid').style.display='grid';
+}
+</script>
+</body>
+</html>
