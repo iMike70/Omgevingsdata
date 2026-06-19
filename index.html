@@ -93,6 +93,7 @@
 
   footer{text-align:center;margin-top:2.5rem;font-size:0.68rem;color:var(--muted);}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -119,9 +120,11 @@
 <div class="error-box" id="errorBox"></div>
 
 <div class="loc-bar" id="locBar">
-  <div>
+  <div style="flex:1;">
     <div class="loc-name" id="locName"></div>
     <div class="loc-coords" id="locCoords"></div>
+    <div class="loc-coords" id="locCoordsDD" style="margin-top:0.1rem;"></div>
+    <div id="locAddress" style="font-size:0.72rem;color:var(--muted);margin-top:0.2rem;line-height:1.4;"></div>
   </div>
   <div class="loc-time" id="locTime"></div>
 </div>
@@ -235,11 +238,11 @@
 </div>
 
 <div style="max-width:480px;margin:1rem auto 0;display:none;" id="exportRow">
-  <button onclick="exportCSV()"
+  <button onclick="exportXLSX()"
     style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;
     color:var(--sky-accent);font-family:'IBM Plex Sans',sans-serif;font-size:0.9rem;font-weight:600;
     padding:0.75rem 1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:0.5rem;">
-    📥 Exporteer naar CSV
+    📥 Exporteer naar Excel
   </button>
 </div>
 
@@ -251,6 +254,14 @@
 const WIND_DIRS=['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'];
 let _exportData = null;
 function degToDir(d){if(d===null||d===undefined)return'–';return WIND_DIRS[Math.round(d/22.5)%16];}
+function toDM(deg, isLat){
+  const abs=Math.abs(deg);
+  const d=Math.floor(abs);
+  const m=((abs-d)*60).toFixed(4);
+  const dir=isLat?(deg>=0?'N':'S'):(deg>=0?'E':'W');
+  return `${d}° ${m}' ${dir}`;
+}
+
 function msToBft(ms){const s=[0.3,1.6,3.4,5.5,8.0,10.8,13.9,17.2,20.8,24.5,28.5,32.7];for(let i=0;i<s.length;i++)if(ms<s[i])return i;return 12;}
 
 function setStatus(msg,spin=false){
@@ -320,13 +331,21 @@ async function fetchAll(lat,lon){
     const gd=await gr.json();
     const a=gd.address||{};
     placeName=a.city||a.town||a.village||a.municipality||placeName;
+    const road=a.road||a.pedestrian||a.footway||'';
+    const houseNo=a.house_number||'';
+    const postcode=a.postcode||'';
+    const city=a.city||a.town||a.village||a.municipality||'';
+    const country=a.country||'';
+    const addrLine=[road+(houseNo?' '+houseNo:''),postcode+' '+city,country].filter(s=>s.trim()).join(', ');
+    document.getElementById('locAddress').textContent=addrLine;
   }catch(e){}
 
   // Show location bar
   const lb=document.getElementById('locBar');
   lb.classList.add('visible');
   document.getElementById('locName').textContent=placeName;
-  document.getElementById('locCoords').textContent=`${lat.toFixed(5)}°N, ${lon.toFixed(5)}°E`;
+  document.getElementById('locCoords').textContent=`${toDM(lat,true)}  ${toDM(lon,false)}`;
+  document.getElementById('locCoordsDD').textContent=`${lat.toFixed(5)}°N, ${lon.toFixed(5)}°E`;
   document.getElementById('locTime').textContent='Bijgewerkt: '+new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});
 
   // 1. Open-Meteo weather + UV
@@ -425,6 +444,9 @@ async function fetchAll(lat,lon){
   _exportData={
     time:new Date().toLocaleString('nl-NL'),
     place:document.getElementById('locName').textContent,
+    coordsDM:document.getElementById('locCoords').textContent,
+    coordsDD:document.getElementById('locCoordsDD').textContent,
+    address:document.getElementById('locAddress').textContent,
     lat:lat.toFixed(5),
     lon:lon.toFixed(5),
     temp:document.getElementById('valTemp').textContent.replace('°C','').trim(),
@@ -442,34 +464,39 @@ async function fetchAll(lat,lon){
   document.getElementById('exportRow').style.display='block';
 }
 
-function exportCSV(){
+function exportXLSX(){
   if(!_exportData){alert('Geen data beschikbaar om te exporteren.');return;}
   const d=_exportData;
-  const rows=[
-    ['Veld','Waarde','Eenheid'],
-    ['Tijdstip',d.time,''],
-    ['Locatie',d.place,''],
-    ['Latitude',d.lat,'°N'],
-    ['Longitude',d.lon,'°E'],
-    ['Temperatuur',d.temp,'°C'],
-    ['Zichtbaarheid',d.vis,'km'],
-    ['Neerslag kans',d.precip,'%'],
-    ['Windsnelheid',d.wind,'m/s'],
-    ['Windvlagen',d.gust,'m/s'],
-    ['Windrichting (graden)',d.windDir,'°'],
-    ['Windrichting (tekst)',d.windDirText,''],
-    ['UV Index',d.uv,''],
-    ['Kp Index',d.kp,''],
-    ['Zichtbare satellieten (24u)',d.satCount,''],
-  ];
-  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url;
-  a.download=`omgevingsdata_${d.place.replace(/[^a-zA-Z0-9]/g,'_')}_${new Date().toISOString().slice(0,10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+
+  // Header row + data row (each field = one column)
+  const headers=['Tijdstip','Locatie','Coördinaten (DM+)','Coördinaten (DD)','Adres',
+    'Temp (°C)','Zichtbaarheid (km)','Neerslag kans (%)','Wind (m/s)','Windvlagen (m/s)',
+    'Windrichting (°)','Windrichting (tekst)','UV Index','Kp Index','Zichtbare satellieten (24u)'];
+  const values=[d.time,d.place,d.coordsDM,d.coordsDD,d.address,
+    parseFloat(d.temp)||d.temp,parseFloat(d.vis)||d.vis,parseFloat(d.precip)||d.precip,
+    parseFloat(d.wind)||d.wind,parseFloat(d.gust)||d.gust,
+    parseFloat(d.windDir)||d.windDir,d.windDirText,
+    parseFloat(d.uv)||d.uv,parseFloat(d.kp)||d.kp,parseInt(d.satCount)||d.satCount];
+
+  const ws=XLSX.utils.aoa_to_sheet([headers,values]);
+
+  // Column widths
+  ws['!cols']=headers.map(h=>({wch:Math.max(h.length+2,14)}));
+
+  // Style header row bold (basic)
+  headers.forEach((_,i)=>{
+    const cell=XLSX.utils.encode_cell({r:0,c:i});
+    if(ws[cell]){ws[cell].s={font:{bold:true},fill:{fgColor:{rgb:'1B2D45'}}};}
+  });
+
+  // Auto table
+  ws['!autofilter']={ref:`A1:${XLSX.utils.encode_col(headers.length-1)}1`};
+
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Omgevingsdata');
+
+  const fname=`omgevingsdata_${d.place.replace(/[^a-zA-Z0-9]/g,'_')}_${new Date().toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb,fname);
 }
 </script>
 </body>
