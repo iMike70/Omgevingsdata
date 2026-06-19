@@ -225,14 +225,22 @@
   </div>
 
   <!-- Zichtbare satellieten -->
-  <div class="data-card wide" id="satCard">
+  <div class="data-card card-sat">
     <div class="data-icon">🛰️</div>
-    <div class="data-label">Zichtbare satellieten (komende 24u)</div>
-    <div class="sat-list" id="satList">
-      <div style="color:var(--muted);font-size:0.82rem;">Laden…</div>
-    </div>
+    <div class="data-label">Zichtbare satellieten</div>
+    <div class="data-value" id="valSat">–</div>
+    <div class="data-sub" id="subSat">komende 24 uur</div>
   </div>
 
+</div>
+
+<div style="max-width:480px;margin:1rem auto 0;display:none;" id="exportRow">
+  <button onclick="exportCSV()"
+    style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;
+    color:var(--sky-accent);font-family:'IBM Plex Sans',sans-serif;font-size:0.9rem;font-weight:600;
+    padding:0.75rem 1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:0.5rem;">
+    📥 Exporteer naar CSV
+  </button>
 </div>
 
 <footer>
@@ -241,6 +249,7 @@
 
 <script>
 const WIND_DIRS=['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'];
+let _exportData = null;
 function degToDir(d){if(d===null||d===undefined)return'–';return WIND_DIRS[Math.round(d/22.5)%16];}
 function msToBft(ms){const s=[0.3,1.6,3.4,5.5,8.0,10.8,13.9,17.2,20.8,24.5,28.5,32.7];for(let i=0;i<s.length;i++)if(ms<s[i])return i;return 12;}
 
@@ -400,38 +409,67 @@ async function fetchAll(lat,lon){
     document.getElementById('subKp').textContent='Niet beschikbaar';
   }
 
-  // ── ISS passes ───────────────────────────────────────────────
-  const satList=document.getElementById('satList');
+  // ── ISS passes (count only) ──────────────────────────────────
+  let satCount = 0;
   if(issRes.status==='fulfilled'&&issRes.value.passes){
-    const passes=issRes.value.passes.filter(p=>p.visible).slice(0,5);
-    if(!passes.length){
-      satList.innerHTML='<div style="color:var(--muted);font-size:0.82rem;">Geen zichtbare ISS-passages komende tijd.</div>';
-    } else {
-      satList.innerHTML=passes.map(p=>{
-        const rise=new Date(p.rise.time);
-        const timeStr=rise.toLocaleString('nl-NL',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
-        const dur=Math.round((new Date(p.set.time)-rise)/1000/60);
-        const el=p.culmination?.elevation_deg?.toFixed(0)??'?';
-        const fromDir=p.rise?.compass||'';
-        const toDir=p.set?.compass||'';
-        return `<div class="sat-row">
-          <div>
-            <div class="sat-name">🛸 ISS (ZARYA)</div>
-            <div class="sat-time">${timeStr}</div>
-            <div class="sat-el">Vanuit ${fromDir} → ${toDir} · ${dur} min · max ${el}°</div>
-          </div>
-          <div class="sat-visible">ZICHTBAAR</div>
-        </div>`;
-      }).join('');
-    }
+    const passes=issRes.value.passes.filter(p=>p.visible);
+    satCount=passes.length;
+    document.getElementById('valSat').textContent=satCount;
+    document.getElementById('subSat').textContent=satCount===1?'zichtbare passage (24u)':`zichtbare passages (24u)`;
   } else {
-    satList.innerHTML=`<div style="font-size:0.82rem;color:var(--muted);">
-      ISS-passages niet beschikbaar via API.<br>
-      <a href="https://spotthestation.nasa.gov" target="_blank" style="color:var(--sky-accent);">→ NASA Spot the Station</a>
-    </div>`;
+    document.getElementById('valSat').textContent='–';
+    document.getElementById('subSat').textContent='Niet beschikbaar';
   }
 
+  // Store export data
+  _exportData={
+    time:new Date().toLocaleString('nl-NL'),
+    place:document.getElementById('locName').textContent,
+    lat:lat.toFixed(5),
+    lon:lon.toFixed(5),
+    temp:document.getElementById('valTemp').textContent.replace('°C','').trim(),
+    vis:document.getElementById('valVis').textContent.replace('km','').trim(),
+    precip:document.getElementById('valPrecip').textContent.replace('%','').trim(),
+    wind:document.getElementById('valWind').textContent.replace('m/s','').trim(),
+    gust:document.getElementById('valGust').textContent.replace('m/s','').trim(),
+    windDir:document.getElementById('valWindDir').textContent.replace('°','').trim(),
+    windDirText:document.getElementById('valWindDirText').textContent.replace('Uit het ','').trim(),
+    uv:document.getElementById('valUV').textContent.trim(),
+    kp:document.getElementById('valKp').textContent.trim(),
+    satCount:document.getElementById('valSat').textContent.trim(),
+  };
   document.getElementById('dataGrid').style.display='grid';
+  document.getElementById('exportRow').style.display='block';
+}
+
+function exportCSV(){
+  if(!_exportData){alert('Geen data beschikbaar om te exporteren.');return;}
+  const d=_exportData;
+  const rows=[
+    ['Veld','Waarde','Eenheid'],
+    ['Tijdstip',d.time,''],
+    ['Locatie',d.place,''],
+    ['Latitude',d.lat,'°N'],
+    ['Longitude',d.lon,'°E'],
+    ['Temperatuur',d.temp,'°C'],
+    ['Zichtbaarheid',d.vis,'km'],
+    ['Neerslag kans',d.precip,'%'],
+    ['Windsnelheid',d.wind,'m/s'],
+    ['Windvlagen',d.gust,'m/s'],
+    ['Windrichting (graden)',d.windDir,'°'],
+    ['Windrichting (tekst)',d.windDirText,''],
+    ['UV Index',d.uv,''],
+    ['Kp Index',d.kp,''],
+    ['Zichtbare satellieten (24u)',d.satCount,''],
+  ];
+  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=`omgevingsdata_${d.place.replace(/[^a-zA-Z0-9]/g,'_')}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 </script>
 </body>
